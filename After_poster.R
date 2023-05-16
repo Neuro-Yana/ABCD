@@ -7,7 +7,7 @@ library("gamm4")
 library("ggplot2")
 library("matching")
 library("mgcv") - #don't have it in my packages?! how?'
-library(tidyverse)
+library("tidyverse")
 
 #reading data
 data <- read.csv("3_fullest.csv")
@@ -64,6 +64,8 @@ geom_point(shape=1)
 #to do this, I assign the bmigroups to a variable that stores data as factor
 factorbmigroup <- factor(year2$bmigroup)
 
+#MORE DATA PREPARATION BCS MODEL/PLOTTING KEEPS SAYING THERE'S TOO MUCH NANs 
+#TO DO SMTH MEANINIGFUL
 
 #mean centering age and ssrt
 year2$mcage <- scale(year2$age, scale = FALSE)
@@ -72,17 +74,17 @@ year2$mcssrt <- scale(year2$ssrt, scale = FALSE)
 summary(is.na(year2$mcssrt)) #- no NAs in either MC age or ssrt
 
 #drop all NAs for running the analysis
+##dropping nas from specific columns (ssrt and bmi)
+
 Y2_dna <- year2
 Y2_dna <- data[!is.na(Y2_dna$sex_at_birth),]
 Y2_dna <- data[!is.na(Y2_dna$household.income),]
 Y2_dna <- data[!is.na(Y2_dna$race_ethnicity),]
 
-#for some reason, there no MC, bmigroup columns after dropping NAs
+#for some reason, there are no MC, bmigroup columns after dropping NAs
 #so I am adding them back
 #mean centering age and ssrt
-Y2_dna$mcage <- scale(Y2_dna$age, scale = FALSE)
-Y2_dna$mcssrt <- scale(Y2_dna$ssrt, scale = FALSE)
-Y2_dna$mcage
+#First added BMI groups
 ##BMI filtering AGAIN :/
 
 # didn't work Y2_dna <- data[!is.na(Y2_dna$bmigroup),]
@@ -98,12 +100,17 @@ Y2_dna$bmigroup <- cut(Y2_dna$bmi,
 summary(Y2_dna$bmigroup)
 Y2_dna$bmigroup <- factor(Y2_dna$bmigroup)
 
+#then MC columns
+Y2_dna$mcage <- scale(Y2_dna$age, scale = FALSE)
+Y2_dna$mcssrt <- scale(Y2_dna$ssrt, scale = FALSE)
+Y2_dna$mcage
+
 
 #NOW WE ARE READY TO RUN THE MODEL
 #FOLLOW-UP SSRT - BMI GROUPS GAM
 #then, run the model for meancentered age and ssrt #with no nas
 
-Y2_bmiGssrt <- gam(mcssrt ~ s(mcage, by = factorbmigroup) + 
+Y2_bmiGssrt <- gam(mcssrt ~ s(mcage, by = bmigroup) + 
     sex_at_birth + household.income + race_ethnicity, 
     data = Y2_dna, method = "REML")
 summary(Y2_bmiGssrt)
@@ -114,82 +121,83 @@ summary(Y2_bmiGssrt)
 #now plotting the model 
 library(visreg)
 plot(visreg(Y2_bmiGssrt, xvar = "mcage",
-  by = "factorbmigroup", data = year2, method = "REML"), 
+  by = "bmigroup", data = Y2_dna, method = "REML"), 
   legend=TRUE, ylab = "Mean stop signal reaction time ", 
   xlab = "Age (mean-centered)",)
 
+#Error in y + rr : non-conformable arrays
 
+#running the model for non-mc ssrt and mc age bcs plotting doesn't like the MCs
 
+Y2_bmiGssrt_nmc <- gam(ssrt ~ s(mcage, by = bmigroup) + bmigroup +
+                     sex_at_birth + household.income + race_ethnicity, 
+                   data = Y2_dna, method = "REML")
+summary(Y2_bmiGssrt_nmc)
 
-##dropping nas from specific columns (ssrt and bmi)
-data <- data[!is.na(data$ssrt),]
-data <- data[!is.na(data$bmi),]
-summary(data$bmi)
+plot(visreg(Y2_bmiGssrt_nmc, xvar = "mcage",
+            by = "bmigroup", data = Y2_dna, method = "REML"), 
+     legend=TRUE, ylab = "Mean stop signal reaction time ", 
+     xlab = "Age (mean-centered)",)
+
+## now trying to plot violin plots
+
+library(tidymv)
+
+model_p <- predict_gam(Y2_bmiGssrt_nmc)
+#model_p
+
+model_p %>%
+  ggplot(aes(mcage, fit)) +
+  geom_smooth_ci(bmigroup) + geom_violin()
+
+predict_gam(Y2_bmiGssrt_nmc) %>%
+  ggplot(aes(ssrt, fit)) +
+  geom_smooth_ci(bmigroup)
+ggplot(Y2_bmiGssrt_nmc)
++ 
+
+ggplot(Y2_bmiGssrt_nmc, aes(x=bmi, y=ssrt, color = bmigroup)) +
+  geom_point(shape=1)
+
+ggplot(year2, aes(x=bmi, y=ssrt, color = bmigroup)) +
+  geom_point(shape=1)  
+
 
 ##FOLLOW-UP SSRT - BMI IN GENERAL GAM
 
-#then, run the model (for non-meancentered age and ssrt)
-names(data_base)
-base_bmiGssrt <- gam(ssrt ~ s(mcage, by = factorbmigroup) + race_ethnicity + sex_at_birth + household.income, data = data_base, method = "REML")
-summary(base_bmiGssrt)
+#then, run the model (for non-meancentered ssrt and MC age)
+#names(data_base)
+Y2_bmissrt <- gam(ssrt ~ s(bmi) + as.matrix(mcage) +
+        race_ethnicity + sex_at_birth + household.income, data = Y2_dna, method = "REML")
+summary(Y2_bmissrt)
+
+#added as matrix to mc age because the plotting did not like it
 
 
+plot(visreg(Y2_bmissrt, xvar = "bmi", data = Y2_dna), 
+     legend=TRUE, ylab = "Mean stop signal reaction time ", 
+     xlab = "BMI",)
 
-#trying to plot the gam model for meancentered age and ssrt with no nas 
-#gives an error
-#so run for non-mc ssrt
-
-
+#ASK GRACE WHY IT DOES NOT GIVE RESULTS FOR BMI
 
 ------------------------------------------------------------
-#This was in the baseline code but gives null mcage column in follow-up
+#started BOLD analysis but then decided to do violin plots
+  
+library(tidyverse)
+library("dplyr")
+  
+##BOLD data analysis
+#We have data in Y2_dna
+#I don't want to mess it up so I will use a diff var
+Y2B_dna <- Y2_dna
 
-##dropping nas from mc columns because the plotting gives an error
-#year2_dna <- year2[!is.na(year2$mcssrt),]
-summary(year2_dna$mcssrt)
-year2_dna <- data_base[!is.na(year2_dna$mcage),]
-summary(year2_dna$mcage)
-#then, run the model (for non-meancentered age and ssrt)
-names(data_base)
-base_bmiGssrt <- gam(ssrt ~ s(mcage, by = factorbmigroup) + race_ethnicity + sex_at_birth + household.income, data = data_base, method = "REML")
-summary(base_bmiGssrt)
+#Now we can renew column names for ROIs
 
-#then, run the model for meancentered age and ssrt with no nas
-names(data_base1)
-base1_bmiGssrt <- gam(mcssrt ~ s(mcage, by = factorbmigroup) + race_ethnicity + sex_at_birth + household.income, data = data_base1, method = "REML")
-summary(base1_bmiGssrt)
+colnames(Y2B_dna) <- gsub("tfmri_sst_all_correct.stop.vs.incorrect.stop_beta_cort.destrieux_", "", colnames(Y2B_dna))
+#PREPARING DATA
+  
 
-#trying to plot the gam model for meancentered age and ssrt with no nas 
-#gives an error
-#so run for non-mc ssrt
-library(visreg)
-
-plot(visreg(base_bmiGssrt, xvar = "mcage",
-            by = "factorbmigroup", data = data_base1, method = "REML"), 
-     legend=TRUE, ylab = "Mean stop signal reaction time ", xlab = "Age (mean-centered)",
-)
-
-
-
-
-
-
-
-----------------------------------------------------
-##filter out underweights
-data_base <- data_base %>% 
-  filter(bmi > 18.5)
-summary(data_base$bmi)
-
-#add new column of bmi categories
-data_base$bmigroup <- cut(data_base$bmi,
-                          breaks=c(18.5, 25, 30, 36),
-                          labels=c('Recommended', 'Overweight', 'Obese'))
-summary(data_base$bmigroup)
-
-
-
-
+------------------------------------------------------------
 #trying to match by sex
 matched_data_base <-matrix(data_base)
 class(matched_data_base)
