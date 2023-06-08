@@ -1,0 +1,14 @@
+```{r}
+total_long1 <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Total\total_long.csv)")
+```
+
+```{r}
+library(MANOVA.RM)
+data(total_long)
+rman <- RM(total_long$bold ~ total_long$bmigroup * total_long$event_name * total_long$sex_at_birth * total_long$roi, 
+                data = total_long, subject = "id", within = c("event_name", "roi"), 
+                resampling = "WildBS",
+                iter = 1000,  alpha = 0.01, seed = 987)
+summary(rman)
+View(rman)
+```

@@ -1,0 +1,97 @@
+---
+title: "RepManova_5"
+output: html_document
+date: "2023-06-02"
+---
+
+```{r}
+library(tidyr)
+library(plyr)
+```
+
+```{r}
+rois_1 <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Clean data\New\clean_1.csv)")
+rois_2 <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Clean data\New\clean_2.csv)")
+
+```
+
+```{r}
+IDs <- merge(rois_1, rois_2, by="id")
+
+IDs <- as.data.frame(IDs[, -2:-325])
+names(IDs[, 1])
+#turned out the column didn't have a name
+#so I'm naming it bcs that's needed to merge 2 dfs by col name
+colnames(IDs)[1] <-  "id"
+#IDs %>% rename(   IDs = Sepal.Length,sepal_width = Sepal.Width )
+```
+
+```{r}
+
+#filtered out subjects that have for both 2 years 
+
+rois_1 <- merge(rois_1, IDs, by="id")
+rois_2 <- merge(rois_2, IDs, by="id")
+
+#now need to find out ROIs names for converting to long
+colnames(rois_1[13:162])
+#14 - 161 ROI names
+colnames(rois_2[13:162])
+#14 - 161
+```
+  
+        
+```{r}
+rois_1_long <- gather(rois_1, ROI, BOLD, g.and.s.frontomargin.lh:s.temporal.transverse.rh, factor_key=TRUE)
+rois_2_long <- gather(rois_2, ROI, BOLD, g.and.s.frontomargin.lh:s.temporal.transverse.rh, factor_key=TRUE)
+
+
+write.csv(rois_1_long, r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Total\rois1_long.csv)", row.names=FALSE)
+write.csv(rois_2_long, r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Total\rois2_long.csv)", row.names=FALSE)
+#matched col names in excel
+
+ml_rois_1 <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Total\mrois1_long.csv)")
+ml_rois_2 <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Total\mrois2_long.csv)")
+
+total_long <- rbind(ml_rois_1, ml_rois_2)
+
+```
+
+```{r}
+
+total_long <- total_long[
+  order(total_long$id, total_long$ROI, total_long$event_name),
+]
+write.csv(total_long, r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Total\total_long.csv)", row.names=FALSE)
+total_long1 <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\deap data\Total\total_long.csv)")
+```
+
+```{r}
+library(MANOVA.RM)
+data(total_long)
+rman <- RM(total_long$bold ~ total_long$bmigroup * total_long$event_name * total_long$sex_at_birth * total_long$roi, 
+                data = total_long, subject = "id", within = c("event_name", "roi"), 
+                resampling = "WildBS",
+                iter = 1000,  alpha = 0.01, seed = 987)
+summary(rman)
+View(rman)
+```
+
+```{r}
+
+```
+
+
+
+
+```{r}
+#data(EEG)
+rman <- RM(BOLD ~ sex_at_birth * bmigroup * event_name * ROI * mcage, 
+                data = total_long, subject = "id", within = c("event_name", "ROI"), 
+                resampling = "WildBS",
+                iter = 1000,  alpha = 0.01, seed = 987)
+summary(rman)
+View(rman)
+```
+```
+
