@@ -1,0 +1,181 @@
+---
+title: "ROIS_dividing"
+output: html_document
+date: "2023-06-12"
+---
+Libraries
+
+```{r}
+library(plyr)
+library(dplyr)
+library(tidyverse)
+library(MatchIt)
+```
+
+
+Reading data
+
+```{r}
+dna1 <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Baseline_bmiperc_wide.csv)")
+dna2 <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Followup_bmiperc_wide.csv)")
+```
+
+#Dropping overweights (for matching between the groups)
+
+```{r}
+
+dna1_nov <- subset(dna1, dna1$bmi_perc_group != "Overweight")
+dna2_nov <- subset(dna2, dna2$bmi_perc_group != "Overweight")
+
+#still has Ovwerweight group which makes our group non-binary
+dna1_nov$bmi_perc_group <- droplevels(as.factor(dna1_nov$bmi_perc_group))
+summary(as.factor(dna1_nov$bmi_perc_group))  
+# Obese     Recommended 
+#       1424        5963  
+       
+dna2_nov$bmi_perc_group <- droplevels(as.factor(dna2_nov$bmi_perc_group))
+summary(as.factor(dna2_nov$bmi_perc_group))  
+
+#Obese      Recommended 
+#        739        2956   
+```
+
+
+#First, get the obese-rec groups
+#then add 2nd year data
+
+```{r}
+IDs <- merge(dna1_nov, dna2_nov, by="id")
+
+IDs <- as.data.frame(IDs[, -2:-329])
+names(IDs[, 1])
+#turned out the column didn't have a name
+#so I'm naming it bcs that's needed to merge 2 dfs by col name
+colnames(IDs)[1] <-  "id"
+
+#3270 rows
+```
+
+
+
+Match the ob-rec groups in year 1
+then will add the 2nd year data
+```{r}
+dna1_nov <- merge(dna1_nov, IDs, by = "id")
+
+#3270 rows
+#matching the bmi groups
+mdna1_nov <- matchit(as.factor(bmi_perc_group) ~ age + sex_at_birth, data = dna1_nov)
+mdna1_nov <- match.data(mdna1_nov)
+summary(mdna1_nov$bmi_perc_group)
+#Recommended       Obese 
+#     570        570  
+#1140 total, 168 cols
+
+#drop added cols
+mdna1_nov <- mdna1_nov[, c(-166:-168)] 
+#1140 total, 165 cols
+```
+Arranging the cols
+#Selecting ROIS
+```{r}
+#names(mfull)
+
+#deleted unnecessary
+mdna1_nov <- mdna1_nov[, c(-2:-4, -8:-9, -163:-164)]
+#165 cols > 158
+names(mdna1_nov)
+
+#re-ordered to keep the table cleaner
+mdna1_nov <- mdna1_nov[, c(1:8, 157:158,9:156)]
+
+#2788, 158
+
+
+#deleted unnecessary
+dna2_nov <- dna2_nov[, c(-2:-4, -8:-9, -163:-164)]
+#165 cols > 158
+names(dna2_nov)
+
+#re-ordered to keep the table cleaner
+dna2_nov <- dna2_nov[, c(1:8, 157:158,9:156)]
+
+#2788, 158
+
+#-------------------------------------------------------------------------------
+
+names(mdna1_nov)
+
+mdna1_nov <- mdna1_nov[, c(-166:-168)]
+
+mdna1_nov <- mdna1_nov[, c(-15:-165)]
+dna2_nov <- dna2_nov [, c(-15:-165)]
+
+
+```
+
+
+
+Now need IDs of these subs to add 2nd year data
+
+
+```{r}
+mIDs <- merge(mdna1_nov, dna2_nov, by="id")
+
+mIDs <- as.data.frame(mIDs[, -2:-329])
+names(mIDs[, 1])
+#turned out the column didn't have a name
+#so I'm naming it bcs that's needed to merge 2 dfs by col name
+colnames(mIDs)[1] <-  "id"
+
+#3270 rows
+```
+Merging the base and FU data in long table, not wide 
+
+```{r}
+#rois1 <- merge(dna1, IDs)
+#rois2 <- merge(dna2, IDs)
+#then binded them
+#complied into 1 line to avoid too many vars 
+
+mfull <-rbind(merge(mdna1_nov, mIDs), merge(dna2_nov, mIDs))
+summary(as.factor(mfull$event_name))
+#2_year_follow_up_y_arm_1    baseline_year_1_arm_1 
+#                    1140                     1140 
+summary(as.factor(mfull$bmi_perc_group))
+# Obese Recommended 
+#      1109        1171
+#2280 rows, 165 cols  
+
+```
+
+
+
+#Making long data for rep Manova
+
+```{r}
+
+
+total_long <- gather(mfull, ROI, BOLD, g.and.s.frontomargin.lh:g.and.s.subcentral.lh, factor_key=TRUE)
+
+total_long <- total_long[order(total_long$id, total_long$ROI, total_long$event_name),]
+summary(as.factor(total_long$event_name))
+
+```
+
+#Coding factors as factors
+
+```{r}
+names(total_long)
+lapply(total_long, class)
+total_long[, c(2, 4:8, 10:11)] <- lapply(total_long[, c(2, 4:8, 10:11)],as.factor)
+
+lapply(total_long, class)
+```
+
+
+Saving the matched long data for subs with 2 years
+```{r}
+write.csv(total_long, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\ROIS for RepMANOVA\1.csv)", row.names=FALSE)
+```
+

@@ -1,0 +1,36 @@
+```{r}
+total_long <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\MATCHED_subs_with_2yeardata_bmiperc_long.csv)")
+```
+
+For testing
+```{r}
+total_long <- read.csv(r"(C:\Users\Yanko\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\ROIS for RepMANOVA\1.csv)")
+```
+
+
+```{r}
+names(total_long)
+lapply(total_long, class)
+total_long[, c(2, 4:8, 10:11)] <- lapply(total_long[, c(2, 4:8, 10:11)],as.factor)
+
+lapply(total_long, class)
+```
+
+```{r}
+# 3-Way Frequency Table
+mytable <- xtabs(~bmi_perc_group+sex_at_birth+event_name+race_ethnicity +ROI + mcage, data=total_long)
+ftable(mytable) # print table
+summary(mytable) # chi-square test of indepedence
+summary(as.factor(total_long$age))
+```
+
+```{r}
+library(MANOVA.RM)
+#data(total_long1)
+rman <- RM(BOLD ~ event_name * ROI * bmi_perc_group * mcage, 
+                data = total_long, subject = "id", within = c("event_name", "ROI"), 
+                resampling = "WildBS",
+                iter = 1,  alpha = 0.01, seed = 987)
+#summary(rman)
+#View(rman)
+```
