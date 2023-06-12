@@ -1,0 +1,436 @@
+---
+title: "Cleaning_data"
+output: html_document
+date: "2023-06-08"
+---
+
+Libraries
+
+```{r}
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(childsds)
+library(MatchIt)
+
+```
+
+Reading data
+
+```{r}
+data <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\3_Fullest_clean.csv)")
+```
+
+#Rename BMI col
+Found the col #s
+
+```{r}
+#first, find the col #s
+names(data)
+
+#6 - age
+#7 - household.income 
+#9 - bmi
+#13 - year
+#14 - sex
+#15-162 - ROIs
+
+
+colnames(data[14:162])
+colnames(data[6])
+colnames(data[7])
+colnames(data[9])
+colnames(data[13])
+
+#rename bmi
+names(data)[9] = "bmi"
+
+```
+
+#Dropping all NAs from cortical regions, age, household.income sex and BMI
+##Dropping is based on data from baseline
+#bcs no data for household.income for year 2 -> will drop all year 2 data
+
+```{r}
+#first create an empty df to write the output df to
+dna1 <- data.frame(data)
+dna1 <- subset (dna1, dna1$id == "1")
+
+#drop NAs - ONLY HAS BASELINE DATA, NEED TO ADD YEAR 2
+for (i in 1:nrow(data)) {
+  row <- data[i, ]
+  if (row[, 13] == "baseline_year_1_arm_1") {
+  dna1 <- rbind(dna1, row[complete.cases(row [, c(6, 7, 9, 11, 13:162)]),])   
+  } 
+}
+
+#74167 rows > 9083 rows
+
+
+#-----------------------------------------------------------------------------
+#Old dropping NAs method
+#dna <- data[complete.cases(data[, c(4, 9, 11, 14:162)]),]
+
+#74167 rows > 15662
+
+
+
+```
+Setting up 2nd year data
+#adding missing income and race_ehnicity data
+#rearranging the col#s correctly
+#dropping NAs as in baseline
+```{r}
+data2 <- subset(data, year == "2_year_follow_up_y_arm_1")
+#10414 rows
+missing_data <- dna1[, c("id", "household.income", "race_ethnicity")]
+data2 <- join(data2, missing_data, by = "id")
+#10414 rows
+
+#data2 <- merge(data2, missing_data, by = "id")
+#merge drops the ids that don't exist in some of these 2 dataframes
+
+#join added the 2 columns just at the end of the dataframe
+#now wanna place the columns as in dna1
+#7 - household.income
+#11 - race_ethnicity
+names(data2)
+data2 <- data2[, c(-7, -11)] #deleting empty income and race
+#162 rows
+data2 <- data2[, c(1:6, 161, 7:9, 162, 10:160)]
+names(data2)
+#162 rows
+#Dropping NAs
+dna2 <- data2[complete.cases(data2 [, c(6, 9, 14:162)]),]
+#4605
+
+```
+
+#Merging baseline and 2nd year data
+(bcs 2nd year data has dropped out when I was filtering NAs)
+
+```{r}
+dna <- rbind(dna1, dna2)
+#13688 rows
+
+```
+
+
+#Add mean centered age
+#deleted income col - it was some household.incom.bl col I renamed to income by mistake
+```{r}
+dna$mcage <- scale(dna$age, scale = FALSE)
+
+#deleted income col - it was some household.incom.bl col I renamed to income by mistake
+dna = subset(dna, select = -income)
+```
+
+#Add BMI%
+```{r}
+
+#names(dna)
+dna$agey <- dna$age/12
+
+dna$bmi_perc <- childsds::sds(dna$bmi,
+                    age = dna$agey,
+                    sex = dna$sex_at_birth, male = "M", female = "F",
+                    ref = cdc.ref,
+                    item = "bmi",
+                    type = "perc")
+
+dna$bmi_perc <- dna$bmi_perc*100
+```
+
+#Filter out underweights
+#Add BMI% groups
+
+```{r}
+#filter out underweights
+
+dna <- dna %>% filter(bmi_perc > 5)
+summary(dna$bmi_perc)
+
+#add new column of bmi categories
+dna$bmi_perc_group <- cut(dna$bmi_perc,
+                          breaks=c(5, 85, 95, 100),
+                          labels=c('Recommended', 'Overweight', 'Obese'))
+summary(as.factor(dna$bmi_perc_group))
+
+#Recommended  Overweight       Obese
+#2163        2073        8919 
+```
+#Save full dataset
+
+```{r}
+#renamed year back to event_name (to minimize renamings in other scripts)
+names(dna)
+names(dna)[12] <- "event_name"
+
+#13155 rows
+write.csv(dna, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Full_bmiperc_wide.csv)", row.names=FALSE)
+```
+
+
+#Now divide into base and follow-up datasets
+#Save them
+
+```{r}
+
+summary(as.factor(dna$event_name)) #as factor bcs these variables are categorical
+
+#2_year_follow_up_y_arm_1    baseline_year_1_arm_1 
+#                    4436                     8719 
+
+#choosing the baseline data
+dna1 <- subset(dna, dna$event_name == "baseline_year_1_arm_1")
+summary(as.factor(dna1$event_name))
+
+#baseline_year_1_arm_1 
+#                 8719 
+
+write.csv(dna1, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Baseline_bmiperc_wide.csv)", row.names=FALSE)
+
+#choosing follow-up data                    
+dna2 <- subset(dna, dna$event_name == "2_year_follow_up_y_arm_1")
+summary(as.factor(dna2$event_name))
+
+#2_year_follow_up_y_arm_1 
+#                    4436
+
+
+write.csv(dna2, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Followup_bmiperc_wide.csv)", row.names=FALSE)
+
+```
+#Making a dataset of subs with both baseline and follow-up data
+#saving
+
+```{r}
+#making a dataset of subs with  both baseline and follow-up data
+full_subs <- merge(dna1, dna2, by = "id")
+#4340 rows, 329 cols
+full_subs$id.y <- full_subs$id
+#4340 rows, 330 cols
+summary(as.factor(full_subs$event_name.y))
+
+write.csv(full_subs, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Subs_with_both_years_bmiperc_wide.csv)", row.names=FALSE)
+
+```
+
+
+
+
+#Matching datasets between groups
+Year1 
+```{r}
+summary(as.factor(dna1$bmi_perc_group))
+#Obese  Overweight Recommended 
+#       1424        1332        5963 
+
+
+#I didn't figure out how to make three equal samples
+#So I will have to use the matchit function
+#It requires 2 samples 
+#Thus I am dropping the overweight
+mdna1 <-dna1
+mdna1 <-subset(dna1, dna1$bmi_perc_group != "Overweight")
+
+#still has Overweight group which makes our group non-binary
+mdna1$bmi_perc_group <- droplevels(as.factor(mdna1$bmi_perc_group))
+summary(as.factor(mdna1$bmi_perc_group))  
+#Recommended       Obese 
+#       5963         1424 
+#matching the bmi groups
+mdna1 <- matchit(as.factor(bmi_perc_group) ~ age + sex_at_birth, data = mdna1)
+summary(mdna1)
+mdna1 <- match.data(mdna1)
+summary(mdna1$bmi_perc_group)
+#Recommended       Obese 
+#        1424         1424 
+```
+
+Year 2
+```{r}
+#I didn't figure out how to make three equal samples
+#So I will have to use the matchit function
+#It requires 2 samples 
+#Thus I am dropping the overweight
+mdna2 <- dna2
+mdna2 <- subset(dna2, dna2$bmi_perc_group != "Overweight")
+
+#still has Ovwerweight group which makes our group non-binary
+mdna2$bmi_perc_group <- droplevels(as.factor(mdna2$bmi_perc_group))
+summary(as.factor(mdna2$bmi_perc_group))  
+#Recommended       Obese 
+#       739         2956 
+
+#matching the bmi groups
+mdna2 <- matchit(as.factor(bmi_perc_group) ~ age + sex_at_birth, data = mdna2)
+mdna2 <- match.data(mdna2)
+summary(mdna2$bmi_perc_group)
+#Recommended       Obese 
+#        739         739 
+
+```
+Saving matched datasets
+
+```{r}
+write.csv(mdna1, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\MATCHED_Baseline_bmiperc_wide.csv)", row.names=FALSE)
+write.csv(mdna2, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\MATCHED_Followup_bmiperc_wide.csv)", row.names=FALSE)
+
+```
+
+
+
+
+#READ TO AVOID RERUNNING THE ABOVE LOOP
+
+```{r}
+#dna <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Full_bmiperc_wide.csv)")
+
+dna1 <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Baseline_bmiperc_wide.csv)")
+dna2 <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Followup_bmiperc_wide.csv)")
+
+#mdna1 <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\MATCHED_Baseline_bmiperc_wide.csv)")
+#mdna2 <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\MATCHED_Followup_bmiperc_wide.csv)")
+
+
+
+full_subs <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\Subs_with_both_years_bmiperc_wide.csv)")
+
+```
+
+#Dropping overweights (for matching between the groups)
+
+```{r}
+
+dna1_nov <- subset(dna1, dna1$bmi_perc_group != "Overweight")
+dna2_nov <- subset(dna2, dna2$bmi_perc_group != "Overweight")
+
+#still has Ovwerweight group which makes our group non-binary
+dna1_nov$bmi_perc_group <- droplevels(as.factor(dna1_nov$bmi_perc_group))
+summary(as.factor(dna1_nov$bmi_perc_group))  
+# Obese     Recommended 
+#       1424        5963  
+       
+dna2_nov$bmi_perc_group <- droplevels(as.factor(dna2_nov$bmi_perc_group))
+summary(as.factor(dna2_nov$bmi_perc_group))  
+
+#Obese      Recommended 
+#        739        2956   
+```
+
+
+##MAKING LONG DATA FOR REP MANOVA
+
+#First, get the obese-rec groups
+#then add 2nd year data
+
+```{r}
+IDs <- merge(dna1_nov, dna2_nov, by="id")
+
+IDs <- as.data.frame(IDs[, -2:-329])
+names(IDs[, 1])
+#turned out the column didn't have a name
+#so I'm naming it bcs that's needed to merge 2 dfs by col name
+colnames(IDs)[1] <-  "id"
+
+#3270 rows
+```
+
+
+Match the ob-rec groups in year 1
+then will add the 2nd year data
+```{r}
+dna1_nov <- merge(dna1_nov, IDs, by = "id")
+
+#3270 rows
+#matching the bmi groups
+mdna1_nov <- matchit(as.factor(bmi_perc_group) ~ age + sex_at_birth, data = dna1_nov)
+mdna1_nov <- match.data(mdna1_nov)
+summary(mdna1_nov$bmi_perc_group)
+#Recommended       Obese 
+#     570        570  
+#1140 total, 168 cols
+
+#drop added cols
+mdna1_nov <- mdna1_nov[, c(-166:-168)] 
+#1140 total, 165 cols
+```
+
+Now need IDs of these subs to add 2nd year data
+
+
+```{r}
+mIDs <- merge(mdna1_nov, dna2_nov, by="id")
+
+mIDs <- as.data.frame(mIDs[, -2:-329])
+names(mIDs[, 1])
+#turned out the column didn't have a name
+#so I'm naming it bcs that's needed to merge 2 dfs by col name
+colnames(mIDs)[1] <-  "id"
+
+#3270 rows
+```
+
+Merging the base and FU data in long table, not wide 
+
+```{r}
+#rois1 <- merge(dna1, IDs)
+#rois2 <- merge(dna2, IDs)
+#then binded them
+#complied into 1 line to avoid too many vars 
+
+mfull <-rbind(merge(mdna1_nov, mIDs), merge(dna2_nov, mIDs))
+summary(as.factor(mfull$event_name))
+#2_year_follow_up_y_arm_1    baseline_year_1_arm_1 
+#                    1140                     1140 
+summary(as.factor(mfull$bmi_perc_group))
+# Obese Recommended 
+#      1109        1171
+#2280 rows, 165 cols  
+
+```
+
+
+
+#Making long data for rep Manova
+
+```{r}
+names(mfull)
+
+#deleted unnecessary
+mfull <- mfull[, c(-2:-4, -8:-9, -163:-164)]
+#165 cols > 158
+names(mfull)
+
+#re-ordered to keep the table cleaner
+mfull <- mfull[, c(1:8, 157:158, 9:156)]
+
+#2788, 158
+
+total_long <- gather(mfull, ROI, BOLD, g.and.s.frontomargin.lh:s.temporal.transverse.rh, factor_key=TRUE)
+
+total_long <- total_long[order(total_long$id, total_long$ROI, total_long$event_name),]
+summary(as.factor(total_long$event_name))
+
+```
+
+#Coding factors as factors
+
+```{r}
+names(total_long)
+lapply(total_long, class)
+total_long[, c(2, 4:8, 10:11)] <- lapply(total_long[, c(2, 4:8, 10:11)],as.factor)
+
+lapply(total_long, class)
+```
+
+
+
+Saving the matched long data for subs with 2 years
+```{r}
+write.csv(total_long, r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\MATCHED_subs_with_2yeardata_bmiperc_long.csv)", row.names=FALSE)
+```
+
+
+
