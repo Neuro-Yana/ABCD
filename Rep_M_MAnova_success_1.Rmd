@@ -1,0 +1,46 @@
+---
+title: "Rep_M_MAnova_success_1"
+output: html_document
+date: "2023-06-14"
+---
+
+
+```{r}
+total_long <- read.csv(r"(C:\Users\User\OneDrive - University of Wyoming\Desktop - Copy\Lab\abcd\0_Working\Clean data\Finalized\MATCHED_subs_with_2yeardata_bmiperc_long.csv)")
+```
+
+Changing to factors
+
+```{r}
+names(total_long)
+lapply(total_long, class)
+total_long[, c(2, 4:8, 10:11)] <- lapply(total_long[, c(2, 4:8, 10:11)],as.factor)
+#for full
+#total_long[, c(5, 7, 10:13, 16:17)] <- lapply(total_long[, c(5, 7, 10:13, 16:17)],as.factor)
+lapply(total_long_s, class)
+```
+
+
+#Preparing the dataset for MANOVA
+#Needed to exclude as many vars as possible
+#People who lost weight got excluded
+```{r}
+names(total_long)
+total_long <- total_long[, c(12, 7, 8, 8, 10, 11, 1)]
+total_long <- total_long[order(total_long$id, total_long$event_name, total_long$ROI),]
+total_long <- total_long[, c(-3, -4)]
+total_long_s <- spread(total_long, event_name, BOLD)
+total_long_s <- total_long_s[complete.cases(total_long_s [, 4:5]),]
+#161172
+
+
+```
+
+```{r}
+names(total_long_s)
+colnames(total_long_s)[4] ="year_2"
+fit <- multRM( cbind(year_2, baseline_year_1_arm_1) ~ bmi_perc_group * ROI, data = total_long_s, subject = "id", within = "ROI", iter = 1)
+summary(fit)
+
+```
+
